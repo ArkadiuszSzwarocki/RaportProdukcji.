@@ -1,0 +1,83 @@
+﻿@page "/"
+@inject NavigationManager Navigation
+
+<PageTitle>Raport Produkcji - ISA-95</PageTitle>
+
+<div class="container-fluid mt-4">
+    <h1 class="mb-4">System Raportowania Produkcji</h1>
+    <p class="lead">Standard ISA-95</p>
+
+    <div class="row g-4 mt-3">
+        <div class="col-md-6 col-lg-4">
+            <div class="card tile-card h-100" @onclick="NavigateToPlanning">
+                <div class="card-body text-center">
+                    <div class="tile-icon">
+                        <i class="bi bi-calendar-check" style="font-size: 3rem; color: #0d6efd;"></i>
+                    </div>
+                    <h3 class="card-title mt-3">Planowanie</h3>
+                    <p class="card-text">Planowanie zleceń produkcyjnych na zasyp</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-lg-4">
+            <div class="card tile-card h-100" @onclick="NavigateToFilling">
+                <div class="card-body text-center">
+                    <div class="tile-icon">
+                        <i class="bi bi-box-seam" style="font-size: 3rem; color: #198754;"></i>
+                    </div>
+                    <h3 class="card-title mt-3">Zasyp</h3>
+                    <p class="card-text">Produkcja - wymieszanie surowców i rejestracja szarż</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 col-lg-4">
+            <div class="card tile-card h-100" @onclick="NavigateToBagging">
+                <div class="card-body text-center">
+                    <div class="tile-icon">
+                        <i class="bi bi-bag" style="font-size: 3rem; color: #ffc107;"></i>
+                    </div>
+                    <h3 class="card-title mt-3">Workowanie</h3>
+                    <p class="card-text">Pakowanie produktu w worki</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<style>
+    .tile-card {
+        cursor: pointer;
+        transition: transform 0.2s, box-shadow 0.2s;
+        border: 2px solid #dee2e6;
+    }
+
+    .tile-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        border-color: #0d6efd;
+    }
+
+    .tile-icon {
+        margin-top: 1rem;
+    }
+</style>
+
+@code {
+    private void NavigateToPlanning()
+    {
+        Navigation.NavigateTo("/planning");
+    }
+
+    private void NavigateToFilling()
+    {
+        Navigation.NavigateTo("/filling");
+    }
+
+    private void NavigateToBagging()
+    {
+        Navigation.NavigateTo("/bagging");
+    }
+}
+
