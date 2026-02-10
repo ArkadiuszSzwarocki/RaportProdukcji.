@@ -1,0 +1,180 @@
+@page "/filling"
+@using RaportProdukcji.Models
+@using RaportProdukcji.Services
+@inject IProductionService ProductionService
+@rendermode InteractiveServer
+
+<PageTitle>Zasyp - Produkcja</PageTitle>
+
+<div class="container-fluid mt-4">
+    <h1 class="mb-4">Zasyp - Wymieszanie Surowców</h1>
+
+    <div class="row">
+        <div class="col-md-6 mb-4">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h3>Zlecenia do Realizacji</h3>
+                </div>
+                <div class="card-body">
+                    @if (availableOrders.Count == 0)
+                    {
+                        <p class="text-muted">Brak zleceń do realizacji.</p>
+                    }
+                    else
+                    {
+                        <div class="list-group">
+                            @foreach (var order in availableOrders)
+                            {
+                                <a href="#" class="list-group-item list-group-item-action @(selectedOrder?.Id == order.Id ? "active" : "")"
+                                   @onclick="() => SelectOrder(order)" @onclick:preventDefault>
+                                    <div class="d-flex w-100 justify-content-between">
+                                        <h5 class="mb-1">@order.ProductName</h5>
+                                        <small>ID: @order.Id</small>
+                                    </div>
+                                    <p class="mb-1">
+                                        <strong>Receptura:</strong> @order.RecipeNumber<br />
+                                        <strong>Typ:</strong> @order.BagType.GetDisplayName()<br />
+                                        <strong>Planowana waga:</strong> @order.PlannedWeightKg kg<br />
+                                        <strong>Wymieszano:</strong> @order.TotalMixedWeight kg (@order.BatchCount szarż)<br />
+                                        <strong>Pozostało:</strong> @order.RemainingWeight kg
+                                    </p>
+                                    <small class="text-@(selectedOrder?.Id == order.Id ? "white" : "muted")">
+                                        Status: @GetStatusText(order.Status)
+                                    </small>
+                                </a>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-md-6 mb-4">
+            @if (selectedOrder != null)
+            {
+                <div class="card">
+                    <div class="card-header bg-success text-white">
+                        <h3>Dodaj Szarżę - @selectedOrder.ProductName</h3>
+                    </div>
+                    <div class="card-body">
+                        <div class="mb-3">
+                            <label class="form-label">Waga wymieszanej szarży (kg):</label>
+                            <input type="number" class="form-control form-control-lg" @bind="newBatch.ActualWeightKg" 
+                                   placeholder="np. 1050" step="0.1" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Operator:</label>
+                            <input type="text" class="form-control" @bind="newBatch.Operator" placeholder="Imię operatora" />
+                        </div>
+                        <div class="alert alert-info">
+                            <strong>Informacje o zleceniu:</strong><br />
+                            Waga planowa: @selectedOrder.PlannedWeightKg kg<br />
+                            Już wymieszano: @selectedOrder.TotalMixedWeight kg<br />
+                            Pozostało: @selectedOrder.RemainingWeight kg<br />
+                            Liczba szarż: @selectedOrder.BatchCount
+                        </div>
+                        <button class="btn btn-success btn-lg w-100" @onclick="AddBatch">
+                            <i class="bi bi-plus-circle"></i> Dodaj Szarżę
+                        </button>
+                    </div>
+                </div>
+
+                @if (selectedOrder.Batches.Count > 0)
+                {
+                    <div class="card mt-3">
+                        <div class="card-header">
+                            <h4>Historia Szarż</h4>
+                        </div>
+                        <div class="card-body">
+                            <div class="table-responsive">
+                                <table class="table table-sm">
+                                    <thead>
+                                        <tr>
+                                            <th>Nr</th>
+                                            <th>Waga (kg)</th>
+                                            <th>Operator</th>
+                                            <th>Data</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        @foreach (var batch in selectedOrder.Batches.OrderByDescending(b => b.MixedDateTime))
+                                        {
+                                            <tr>
+                                                <td>@batch.Id</td>
+                                                <td>@batch.ActualWeightKg kg</td>
+                                                <td>@batch.Operator</td>
+                                                <td>@batch.MixedDateTime.ToString("dd.MM.yyyy HH:mm")</td>
+                                            </tr>
+                                        }
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                }
+            }
+            else
+            {
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle"></i> Wybierz zlecenie z listy po lewej stronie, aby dodać szarżę.
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<ProductionOrder> availableOrders = new();
+    private ProductionOrder? selectedOrder;
+    private Batch newBatch = new();
+
+    protected override void OnInitialized()
+    {
+        LoadOrders();
+    }
+
+    private void LoadOrders()
+    {
+        var allOrders = ProductionService.GetAllOrders();
+        availableOrders = allOrders.Where(o => 
+            o.Status == OrderStatus.Planned || 
+            o.Status == OrderStatus.InProgress || 
+            o.Status == OrderStatus.ReadyForBagging).ToList();
+        
+        if (selectedOrder != null)
+        {
+            selectedOrder = ProductionService.GetOrderById(selectedOrder.Id);
+        }
+    }
+
+    private void SelectOrder(ProductionOrder order)
+    {
+        selectedOrder = order;
+        newBatch = new Batch();
+    }
+
+    private void AddBatch()
+    {
+        if (selectedOrder == null || newBatch.ActualWeightKg <= 0 || string.IsNullOrWhiteSpace(newBatch.Operator))
+        {
+            return;
+        }
+
+        ProductionService.AddBatchToOrder(selectedOrder.Id, newBatch);
+        newBatch = new Batch();
+        LoadOrders();
+    }
+
+    private string GetStatusText(OrderStatus status)
+    {
+        return status switch
+        {
+            OrderStatus.Planned => "Planowane",
+            OrderStatus.InProgress => "W trakcie",
+            OrderStatus.ReadyForBagging => "Gotowe do workowania",
+            OrderStatus.Bagging => "Workowanie",
+            OrderStatus.Completed => "Zakończone",
+            _ => status.ToString()
+        };
+    }
+}

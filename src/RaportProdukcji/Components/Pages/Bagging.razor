@@ -1,0 +1,150 @@
+@page "/bagging"
+@using RaportProdukcji.Models
+@using RaportProdukcji.Services
+@inject IProductionService ProductionService
+@rendermode InteractiveServer
+
+<PageTitle>Workowanie</PageTitle>
+
+<div class="container-fluid mt-4">
+    <h1 class="mb-4">Workowanie</h1>
+
+    <div class="card">
+        <div class="card-header bg-warning">
+            <h3>Zlecenia Gotowe do Workowania</h3>
+        </div>
+        <div class="card-body">
+            @if (readyOrders.Count == 0)
+            {
+                <p class="text-muted">Brak zleceń gotowych do workowania.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Nazwa Produktu</th>
+                                <th>Nr Receptury</th>
+                                <th>Typ Worka</th>
+                                <th>Wymieszana Waga</th>
+                                <th>Liczba Szarż</th>
+                                <th>Szacowany Czas</th>
+                                <th>Status</th>
+                                <th>Akcje</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var order in readyOrders)
+                            {
+                                <tr>
+                                    <td>@order.Id</td>
+                                    <td><strong>@order.ProductName</strong></td>
+                                    <td>@order.RecipeNumber</td>
+                                    <td>@order.BagType.GetDisplayName()</td>
+                                    <td>@order.TotalMixedWeight kg</td>
+                                    <td>@order.BatchCount</td>
+                                    <td>
+                                        <span class="badge bg-info">@order.EstimatedBaggingTime.ToString("F1") min</span>
+                                    </td>
+                                    <td>
+                                        <span class="badge bg-@GetStatusColor(order.Status)">@GetStatusText(order.Status)</span>
+                                    </td>
+                                    <td>
+                                        @if (order.Status == OrderStatus.ReadyForBagging)
+                                        {
+                                            <button class="btn btn-sm btn-primary" @onclick="() => StartBagging(order.Id)">
+                                                <i class="bi bi-play-fill"></i> Rozpocznij
+                                            </button>
+                                        }
+                                        else if (order.Status == OrderStatus.Bagging)
+                                        {
+                                            <button class="btn btn-sm btn-success" @onclick="() => CompleteBagging(order.Id)">
+                                                <i class="bi bi-check-circle"></i> Zakończ
+                                            </button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="alert alert-info mt-3">
+                    <h5>Czasy workowania dla 1000 kg:</h5>
+                    <ul>
+                        <li><strong>Worki zgrzewane (20kg/25kg):</strong> 20 minut</li>
+                        <li><strong>Worki szyte (20kg/25kg):</strong> 30 minut</li>
+                        <li><strong>BigBag:</strong> 15 minut</li>
+                    </ul>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    private List<ProductionOrder> readyOrders = new();
+
+    protected override void OnInitialized()
+    {
+        LoadOrders();
+    }
+
+    private void LoadOrders()
+    {
+        var allOrders = ProductionService.GetAllOrders();
+        readyOrders = allOrders.Where(o => 
+            o.Status == OrderStatus.ReadyForBagging || 
+            o.Status == OrderStatus.Bagging).ToList();
+    }
+
+    private void StartBagging(int orderId)
+    {
+        var order = ProductionService.GetOrderById(orderId);
+        if (order != null)
+        {
+            order.Status = OrderStatus.Bagging;
+            ProductionService.UpdateOrder(order);
+            LoadOrders();
+        }
+    }
+
+    private void CompleteBagging(int orderId)
+    {
+        var order = ProductionService.GetOrderById(orderId);
+        if (order != null)
+        {
+            order.Status = OrderStatus.Completed;
+            ProductionService.UpdateOrder(order);
+            LoadOrders();
+        }
+    }
+
+    private string GetStatusColor(OrderStatus status)
+    {
+        return status switch
+        {
+            OrderStatus.Planned => "secondary",
+            OrderStatus.InProgress => "primary",
+            OrderStatus.ReadyForBagging => "success",
+            OrderStatus.Bagging => "warning",
+            OrderStatus.Completed => "info",
+            _ => "secondary"
+        };
+    }
+
+    private string GetStatusText(OrderStatus status)
+    {
+        return status switch
+        {
+            OrderStatus.Planned => "Planowane",
+            OrderStatus.InProgress => "W trakcie",
+            OrderStatus.ReadyForBagging => "Gotowe do workowania",
+            OrderStatus.Bagging => "Workowanie",
+            OrderStatus.Completed => "Zakończone",
+            _ => status.ToString()
+        };
+    }
+}
