@@ -1,0 +1,122 @@
+@using RaportProdukcji.Models
+@using RaportProdukcji.Services
+
+<div class="modal @(isOpen ? "d-block" : "")" style="@(isOpen ? "display:block" : "display:none")" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header bg-info text-white">
+                <h5 class="modal-title">Dodaj Paletę - @CurrentOrder?.ProductName</h5>
+                <button type="button" class="btn-close btn-close-white" @onclick="Close"></button>
+            </div>
+            <div class="modal-body">
+                @if (CurrentOrder != null)
+                {
+                    <div class="mb-3">
+                        <label class="form-label"><strong>Liczba worków:</strong></label>
+                        <input type="number" class="form-control form-control-lg" @bind="bagCount" 
+                               placeholder="np. 50" min="1" />
+                    </div>
+
+                    <div class="alert alert-info">
+                        <strong>Automatycznie obliczana waga palety:</strong><br />
+                        Typ worka: @CurrentOrder.BagType.GetDisplayName()<br />
+                        Waga na worek: @CalculateWeightPerBag(CurrentOrder.BagType) kg<br />
+                        <strong>Całkowita waga: @(bagCount * CalculateWeightPerBag(CurrentOrder.BagType)) kg</strong>
+                    </div>
+
+                    <div class="alert alert-warning">
+                        <strong>Informacje o zleceniu:</strong><br />
+                        Wymieszano dotychczas: @CurrentOrder.TotalMixedWeight kg<br />
+                        Planowa waga: @CurrentOrder.PlannedWeightKg kg<br />
+                        Liczba istniejących palet: @CurrentOrder.Pallets.Count
+                    </div>
+
+                    @if (CurrentOrder.Pallets.Count > 0)
+                    {
+                        <div class="mb-3">
+                            <strong>Istniejące palety:</strong>
+                            <ul class="list-group mt-2">
+                                @foreach (var pallet in CurrentOrder.Pallets)
+                                {
+                                    <li class="list-group-item d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <strong>@pallet.PalletNumber</strong><br />
+                                            <small>@pallet.BagCount worków | @pallet.TotalWeightKg kg</small>
+                                        </div>
+                                        <span class="badge bg-secondary">@pallet.Status</span>
+                                    </li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                }
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" @onclick="Close">Anuluj</button>
+                <button type="button" class="btn btn-primary" @onclick="SavePallet">
+                    <i class="bi bi-plus-circle"></i> Dodaj Paletę
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isOpen)
+{
+    <div class="modal-backdrop fade show"></div>
+}
+
+@code {
+    [Parameter]
+    public ProductionOrder? CurrentOrder { get; set; }
+
+    [Parameter]
+    public EventCallback OnPalletAdded { get; set; }
+
+    [Inject]
+    private IPalletService? PalletService { get; set; }
+
+    private bool isOpen = false;
+    private int bagCount = 50;
+
+    public void Open()
+    {
+        isOpen = true;
+        bagCount = 50;
+    }
+
+    private void Close()
+    {
+        isOpen = false;
+    }
+
+    private async Task SavePallet()
+    {
+        if (CurrentOrder == null || PalletService == null || bagCount <= 0)
+            return;
+
+        try
+        {
+            await PalletService.CreatePalletAsync(CurrentOrder.Id, bagCount);
+            Close();
+            await OnPalletAdded.InvokeAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error adding pallet: {ex.Message}");
+        }
+    }
+
+    private decimal CalculateWeightPerBag(BagType bagType)
+    {
+        return bagType switch
+        {
+            BagType.WelledBag20kg => 20m,
+            BagType.WelledBag25kg => 25m,
+            BagType.SewnBag20kg => 20m,
+            BagType.SewnBag25kg => 25m,
+            BagType.BigBag => 50m,
+            _ => 20m
+        };
+    }
+}

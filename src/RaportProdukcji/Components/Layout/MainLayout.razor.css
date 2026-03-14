@@ -44,6 +44,33 @@ main {
     .top-row ::deep a, .top-row ::deep .btn-link {
         margin-left: 0;
     }
+
+    /* Hide sidebar nav by default on small screens, show when open */
+    .sidebar {
+        width: 100%;
+        position: relative;
+    }
+
+    .nav-scrollable {
+        display: none;
+        position: absolute;
+        top: 3.5rem;
+        left: 0;
+        width: 100%;
+        max-width: none;
+        z-index: 2000;
+        padding: 0.5rem;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+        background: rgb(5, 39, 103);
+    }
+
+    .nav-scrollable.open {
+        display: block;
+    }
+
+    .top-row ::deep .navbar-toggler {
+        display: block !important;
+    }
 }
 
 @media (min-width: 641px) {
@@ -56,6 +83,23 @@ main {
         height: 100vh;
         position: sticky;
         top: 0;
+    }
+
+    .nav-scrollable {
+        display: block !important;
+        position: relative;
+        width: 100%;
+        max-width: 100%;
+        left: auto;
+        top: auto;
+        z-index: auto;
+        box-shadow: none;
+        background: transparent;
+    }
+
+    /* Ukryj przycisk toggle na dużych ekranach */
+    .top-row ::deep .navbar-toggler {
+        display: none !important;
     }
 
     .top-row {

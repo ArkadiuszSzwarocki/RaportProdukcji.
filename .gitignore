@@ -65,3 +65,5 @@ artifacts/
 
 # Node modules
 node_modules/
+
+.fake

@@ -1,0 +1,113 @@
+@using RaportProdukcji.Models
+@using RaportProdukcji.Services
+
+<div class="card mt-3">
+    <div class="card-header bg-secondary text-white">
+        <h5 class="mb-0">
+            <i class="bi bi-box-seam"></i> Historia Palet (@Pallets?.Count ?? 0)
+        </h5>
+    </div>
+    <div class="card-body">
+        @if (Pallets != null && Pallets.Count > 0)
+        {
+            <div class="table-responsive">
+                <table class="table table-hover table-sm">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Nr Palety</th>
+                            <th>Liczba Worków</th>
+                            <th>Waga (kg)</th>
+                            <th>Status</th>
+                            <th>Data Utworzenia</th>
+                            <th>Akcje</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var pallet in Pallets.OrderByDescending(p => p.CreatedDate))
+                        {
+                            <tr>
+                                <td>
+                                    <strong>@pallet.PalletNumber</strong>
+                                </td>
+                                <td>
+                                    <span class="badge bg-info">@pallet.BagCount</span>
+                                </td>
+                                <td>
+                                    @pallet.TotalWeightKg kg
+                                </td>
+                                <td>
+                                    <span class="badge @GetStatusBadgeClass(pallet.Status)">
+                                        @GetStatusText(pallet.Status)
+                                    </span>
+                                </td>
+                                <td>
+                                    <small>@pallet.CreatedDate.ToString("dd.MM.yyyy HH:mm")</small>
+                                </td>
+                                <td>
+                                    @if (pallet.Status != PalletStatus.Completed)
+                                    {
+                                        <button class="btn btn-sm btn-outline-primary" @onclick="() => UpdateStatus(pallet)">
+                                            <i class="bi bi-arrow-right"></i> Dalej
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-warning mb-0">
+                <i class="bi bi-info-circle"></i> Brak palet dla tego zlecenia. Dodaj paletę używając przycisku "Dodaj Paletę".
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public List<Pallet>? Pallets { get; set; }
+
+    [Parameter]
+    public EventCallback<Pallet> OnStatusUpdate { get; set; }
+
+    private async Task UpdateStatus(Pallet pallet)
+    {
+        var nextStatus = pallet.Status switch
+        {
+            PalletStatus.Pending => PalletStatus.Packed,
+            PalletStatus.Packed => PalletStatus.Shipped,
+            PalletStatus.Shipped => PalletStatus.Completed,
+            _ => pallet.Status
+        };
+
+        pallet.Status = nextStatus;
+        await OnStatusUpdate.InvokeAsync(pallet);
+    }
+
+    private string GetStatusBadgeClass(PalletStatus status)
+    {
+        return status switch
+        {
+            PalletStatus.Pending => "bg-warning text-dark",
+            PalletStatus.Packed => "bg-info",
+            PalletStatus.Shipped => "bg-primary",
+            PalletStatus.Completed => "bg-success",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string GetStatusText(PalletStatus status)
+    {
+        return status switch
+        {
+            PalletStatus.Pending => "Oczekujące",
+            PalletStatus.Packed => "Spakowane",
+            PalletStatus.Shipped => "Wysłane",
+            PalletStatus.Completed => "Zakończone",
+            _ => status.ToString()
+        };
+    }
+}

@@ -10,6 +10,7 @@ public class ProductionOrder
     public DateTime CreatedDate { get; set; } = DateTime.Now;
     public OrderStatus Status { get; set; } = OrderStatus.Planned;
     public List<Batch> Batches { get; set; } = new();
+    public List<Pallet> Pallets { get; set; } = new();
 
     public decimal TotalMixedWeight => Batches.Sum(b => b.ActualWeightKg);
     public int BatchCount => Batches.Count;

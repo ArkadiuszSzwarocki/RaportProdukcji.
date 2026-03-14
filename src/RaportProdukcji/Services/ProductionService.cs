@@ -1,84 +1,117 @@
+using Microsoft.EntityFrameworkCore;
+using RaportProdukcji.Data;
 using RaportProdukcji.Models;
 
 namespace RaportProdukcji.Services;
 
 public interface IProductionService
 {
-    List<ProductionOrder> GetAllOrders();
-    ProductionOrder? GetOrderById(int id);
-    void AddOrder(ProductionOrder order);
-    void UpdateOrder(ProductionOrder order);
-    void DeleteOrder(int id);
-    void AddBatchToOrder(int orderId, Batch batch);
-    List<ProductionOrder> GetOrdersByStatus(OrderStatus status);
+    Task<List<ProductionOrder>> GetAllOrdersAsync();
+    Task<ProductionOrder?> GetOrderByIdAsync(int id);
+    Task<ProductionOrder> AddOrderAsync(ProductionOrder order);
+    Task<ProductionOrder> UpdateOrderAsync(ProductionOrder order);
+    Task DeleteOrderAsync(int id);
+    Task<Batch> AddBatchToOrderAsync(int orderId, Batch batch);
+    Task<List<ProductionOrder>> GetOrdersByStatusAsync(OrderStatus status);
+
+    // Sync wrappers for Razor components
+    List<ProductionOrder> GetAllOrders() => GetAllOrdersAsync().Result;
+    ProductionOrder? GetOrderById(int id) => GetOrderByIdAsync(id).Result;
+    void AddOrder(ProductionOrder order) => AddOrderAsync(order).Wait();
+    void UpdateOrder(ProductionOrder order) => UpdateOrderAsync(order).Wait();
+    void DeleteOrder(int id) => DeleteOrderAsync(id).Wait();
+    void AddBatchToOrder(int orderId, Batch batch) => AddBatchToOrderAsync(orderId, batch).Wait();
+    List<ProductionOrder> GetOrdersByStatus(OrderStatus status) => GetOrdersByStatusAsync(status).Result;
 }
 
 public class ProductionService : IProductionService
 {
-    private readonly List<ProductionOrder> _orders = new();
-    private int _nextOrderId = 1;
-    private int _nextBatchId = 1;
+    private readonly AppDbContext _context;
+    private readonly ILogger<ProductionService> _logger;
 
-    public List<ProductionOrder> GetAllOrders()
+    public ProductionService(AppDbContext context, ILogger<ProductionService> logger)
     {
-        return _orders.OrderByDescending(o => o.CreatedDate).ToList();
+        _context = context;
+        _logger = logger;
     }
 
-    public ProductionOrder? GetOrderById(int id)
+    public async Task<List<ProductionOrder>> GetAllOrdersAsync()
     {
-        return _orders.FirstOrDefault(o => o.Id == id);
+        return await _context.ProductionOrders
+            .Include(o => o.Batches)
+            .Include(o => o.Pallets)
+            .OrderByDescending(o => o.CreatedDate)
+            .ToListAsync();
     }
 
-    public void AddOrder(ProductionOrder order)
+    public async Task<ProductionOrder?> GetOrderByIdAsync(int id)
     {
-        order.Id = _nextOrderId++;
-        order.CreatedDate = DateTime.Now;
-        _orders.Add(order);
+        return await _context.ProductionOrders
+            .Include(o => o.Batches)
+            .Include(o => o.Pallets)
+            .FirstOrDefaultAsync(o => o.Id == id);
     }
 
-    public void UpdateOrder(ProductionOrder order)
+    public async Task<ProductionOrder> AddOrderAsync(ProductionOrder order)
     {
-        var existing = _orders.FirstOrDefault(o => o.Id == order.Id);
-        if (existing != null)
-        {
-            var index = _orders.IndexOf(existing);
-            _orders[index] = order;
-        }
+        _context.ProductionOrders.Add(order);
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Created production order {OrderId}: {ProductName}", order.Id, order.ProductName);
+        return order;
     }
 
-    public void DeleteOrder(int id)
+    public async Task<ProductionOrder> UpdateOrderAsync(ProductionOrder order)
     {
-        var order = _orders.FirstOrDefault(o => o.Id == id);
+        _context.ProductionOrders.Update(order);
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Updated production order {OrderId}", order.Id);
+        return order;
+    }
+
+    public async Task DeleteOrderAsync(int id)
+    {
+        var order = await _context.ProductionOrders.FindAsync(id);
         if (order != null)
         {
-            _orders.Remove(order);
+            _context.ProductionOrders.Remove(order);
+            await _context.SaveChangesAsync();
+            _logger.LogInformation("Deleted production order {OrderId}", id);
         }
     }
 
-    public void AddBatchToOrder(int orderId, Batch batch)
+    public async Task<Batch> AddBatchToOrderAsync(int orderId, Batch batch)
     {
-        var order = _orders.FirstOrDefault(o => o.Id == orderId);
-        if (order != null)
-        {
-            batch.Id = _nextBatchId++;
-            batch.ProductionOrderId = orderId;
-            batch.MixedDateTime = DateTime.Now;
-            order.Batches.Add(batch);
+        var order = await _context.ProductionOrders.FindAsync(orderId);
+        if (order == null)
+            throw new ArgumentException($"Order {orderId} not found");
 
-            // Update order status based on weight
-            if (order.TotalMixedWeight >= order.PlannedWeightKg)
-            {
-                order.Status = OrderStatus.ReadyForBagging;
-            }
-            else if (order.Status == OrderStatus.Planned)
-            {
-                order.Status = OrderStatus.InProgress;
-            }
-        }
+        batch.ProductionOrderId = orderId;
+        batch.MixedDateTime = DateTime.Now;
+
+        _context.Batches.Add(batch);
+
+        // Update order status based on total weight
+        var totalWeight = await _context.Batches
+            .Where(b => b.ProductionOrderId == orderId)
+            .SumAsync(b => b.ActualWeightKg) + batch.ActualWeightKg;
+
+        if (totalWeight >= order.PlannedWeightKg)
+            order.Status = OrderStatus.ReadyForBagging;
+        else if (order.Status == OrderStatus.Planned)
+            order.Status = OrderStatus.InProgress;
+
+        await _context.SaveChangesAsync();
+        _logger.LogInformation("Added batch {BatchId} to order {OrderId}: {Weight}kg", batch.Id, orderId, batch.ActualWeightKg);
+        return batch;
     }
 
-    public List<ProductionOrder> GetOrdersByStatus(OrderStatus status)
+    public async Task<List<ProductionOrder>> GetOrdersByStatusAsync(OrderStatus status)
     {
-        return _orders.Where(o => o.Status == status).OrderByDescending(o => o.CreatedDate).ToList();
+        return await _context.ProductionOrders
+            .Include(o => o.Batches)
+            .Include(o => o.Pallets)
+            .Where(o => o.Status == status)
+            .OrderByDescending(o => o.CreatedDate)
+            .ToListAsync();
     }
 }

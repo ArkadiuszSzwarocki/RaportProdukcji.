@@ -1,0 +1,217 @@
+@rendermode InteractiveServer
+@inject HttpClient Http
+@page "/logs"
+
+<div class="container mt-4">
+    <h2>📊 System Logów</h2>
+    
+    <div class="row mb-3">
+        <div class="col-md-6">
+            <div class="btn-group" role="group">
+                <button class="btn btn-sm btn-outline-secondary @(filterType == null ? "active" : "")" @onclick='() => filterType = null'>
+                    Wszystkie
+                </button>
+                <button class="btn btn-sm btn-outline-info @(filterType == "click" ? "active" : "")" @onclick='() => filterType = "click"'>
+                    Klikniecia (@GetCount("click"))
+                </button>
+                <button class="btn btn-sm btn-outline-warning @(filterType == "error" ? "active" : "")" @onclick='() => filterType = "error"'>
+                    Błędy (@GetCount("error"))
+                </button>
+                <button class="btn btn-sm btn-outline-success @(filterType == "info" ? "active" : "")" @onclick='() => filterType = "info"'>
+                    Info (@GetCount("info"))
+                </button>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="RefreshLogs">
+                    🔄 Odśwież
+                </button>
+            </div>
+        </div>
+        <div class="col-md-6 text-end">
+            <button class="btn btn-sm btn-success" @onclick="ExportJSON">📥 JSON</button>
+            <button class="btn btn-sm btn-warning" @onclick="ExportCSV">📥 CSV</button>
+            <button class="btn btn-sm btn-danger" @onclick="ClearLogs">🗑️ Wyczyść</button>
+        </div>
+    </div>
+
+    @if (stats != null)
+    {
+        <div class="alert alert-info mb-3">
+            <strong>Statystyka:</strong>
+            @foreach (var stat in stats)
+            {
+                <span class="badge bg-secondary me-2">@stat.Key: @stat.Value</span>
+            }
+        </div>
+    }
+
+    @if (logs == null)
+    {
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    }
+    else if (logs.Count == 0)
+    {
+        <div class="alert alert-info">Brak logów</div>
+    }
+    else
+    {
+        <div class="table-responsive">
+            <table class="table table-sm table-hover" style="font-size: 0.85rem;">
+                <thead class="table-dark">
+                    <tr>
+                        <th style="width: 180px;">Czas</th>
+                        <th style="width: 80px;">Typ</th>
+                        <th>Wiadomość</th>
+                        <th style="width: 150px;">Szczegóły</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach (var log in GetFilteredLogs())
+                    {
+                        <tr class="@GetRowClass(log)">
+                            <td class="font-monospace">@log.Timestamp:ss</td>
+                            <td>
+                                <span class="badge @GetBadgeClass(log)">@log.Type</span>
+                            </td>
+                            <td>@log.Message</td>
+                            <td>
+                                @if (log.Details?.Count > 0)
+                                {
+                                    <button class="btn btn-xs btn-outline-secondary" @onclick="() => ToggleDetails(log)">
+                                        @(expandedLogs.Contains(log.Timestamp) ? "▼" : "▶")
+                                    </button>
+                                }
+                            </td>
+                        </tr>
+                        @if (expandedLogs.Contains(log.Timestamp) && log.Details?.Count > 0)
+                        {
+                            <tr class="table-light">
+                                <td colspan="4" class="px-4">
+                                    <small class="font-monospace">
+                                        @foreach (var detail in log.Details)
+                                        {
+                                            <div><strong>@detail.Key:</strong> @detail.Value</div>
+                                        }
+                                    </small>
+                                </td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+    }
+</div>
+
+@code {
+    private List<Services.LogEntry> logs = new();
+    private Dictionary<string, int> stats = new();
+    private string? filterType = null;
+    private HashSet<DateTime> expandedLogs = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshLogs();
+        // Odśwież co 2 sekundy
+        _ = Task.Run(async () =>
+        {
+            while (true)
+            {
+                await Task.Delay(2000);
+                await RefreshLogs();
+                StateHasChanged();
+            }
+        });
+    }
+
+    private async Task RefreshLogs()
+    {
+        try
+        {
+            logs = await Http.GetFromJsonAsync<List<Services.LogEntry>>("/_api/logs") ?? new();
+            stats = await Http.GetFromJsonAsync<Dictionary<string, int>>("/_api/logs/stats") ?? new();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading logs: {ex}");
+        }
+    }
+
+    private List<Services.LogEntry> GetFilteredLogs()
+    {
+        var filtered = filterType == null ? logs : logs.Where(l => l.Type == filterType).ToList();
+        return filtered.OrderByDescending(l => l.Timestamp).ToList();
+    }
+
+    private void SetFilter(string? type)
+    {
+        filterType = type;
+    }
+
+    private void ToggleDetails(Services.LogEntry log)
+    {
+        if (expandedLogs.Contains(log.Timestamp))
+            expandedLogs.Remove(log.Timestamp);
+        else
+            expandedLogs.Add(log.Timestamp);
+    }
+
+    private int GetCount(string type)
+    {
+        return logs.Count(l => l.Type == type);
+    }
+
+    private string GetRowClass(Services.LogEntry log) => log.Type switch
+    {
+        "error" => "table-danger",
+        "warning" => "table-warning",
+        "click" => "table-light",
+        "info" => "table-info",
+        _ => ""
+    };
+
+    private string GetBadgeClass(Services.LogEntry log) => log.Type switch
+    {
+        "error" => "bg-danger",
+        "warning" => "bg-warning text-dark",
+        "click" => "bg-secondary",
+        "info" => "bg-info",
+        "navigation" => "bg-primary",
+        _ => "bg-secondary"
+    };
+
+    private async Task ClearLogs()
+    {
+        if (await JSRuntime.InvokeAsync<bool>("confirm", "Wyczyścić wszystkie logi?"))
+        {
+            await Http.DeleteAsync("/_api/logs");
+            logs.Clear();
+            stats.Clear();
+        }
+    }
+
+    private async Task ExportJSON()
+    {
+        var json = System.Text.Json.JsonSerializer.Serialize(logs, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+        await DownloadFile(json, "logs.json", "application/json");
+    }
+
+    private async Task ExportCSV()
+    {
+        var csv = "Timestamp,Type,Message,URL,Details\n";
+        foreach (var log in logs)
+        {
+            csv += $"\"{log.Timestamp:yyyy-MM-dd HH:mm:ss}\",\"{log.Type}\",\"{log.Message}\",\"{log.Url}\",\"{System.Text.Json.JsonSerializer.Serialize(log.Details)}\"\n";
+        }
+        await DownloadFile(csv, "logs.csv", "text/csv");
+    }
+
+    private async Task DownloadFile(string content, string filename, string mimeType)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(content);
+        var base64 = Convert.ToBase64String(bytes);
+        await JSRuntime.InvokeVoidAsync("downloadFile", base64, filename, mimeType);
+    }
+
+    @inject IJSRuntime JSRuntime;
+}

@@ -2,6 +2,8 @@
 @using RaportProdukcji.Models
 @using RaportProdukcji.Services
 @inject IProductionService ProductionService
+@inject IPalletService PalletService
+@inject ILogger<Filling> Logger
 @rendermode InteractiveServer
 
 <PageTitle>Zasyp - Produkcja</PageTitle>
@@ -76,8 +78,16 @@
                         <button class="btn btn-success btn-lg w-100" @onclick="AddBatch">
                             <i class="bi bi-plus-circle"></i> Dodaj Szarżę
                         </button>
+                        <button class="btn btn-info btn-lg w-100 mt-2" @onclick="OpenPalletModal">
+                            <i class="bi bi-box-seam"></i> Dodaj Paletę
+                        </button>
+                        <div class="mt-2">
+                            <ExportReportButton Order="selectedOrder" ShowPrintButton="true" />
+                        </div>
                     </div>
                 </div>
+
+                <PalletHistoryList Pallets="selectedOrder.Pallets" OnStatusUpdate="UpdatePalletStatus" />
 
                 @if (selectedOrder.Batches.Count > 0)
                 {
@@ -123,7 +133,10 @@
     </div>
 </div>
 
+<AddPalletModal @ref="palletModal" CurrentOrder="selectedOrder" OnPalletAdded="OnPalletAdded" />
+
 @code {
+    private AddPalletModal? palletModal;
     private List<ProductionOrder> availableOrders = new();
     private ProductionOrder? selectedOrder;
     private Batch newBatch = new();
@@ -176,5 +189,33 @@
             OrderStatus.Completed => "Zakończone",
             _ => status.ToString()
         };
+    }
+
+    private void OpenPalletModal()
+    {
+        if (selectedOrder != null && palletModal != null)
+        {
+            palletModal.Open();
+        }
+    }
+
+    private Task OnPalletAdded()
+    {
+        LoadOrders();
+        return Task.CompletedTask;
+    }
+
+    private Task UpdatePalletStatus(Pallet pallet)
+    {
+        try
+        {
+            PalletService.UpdatePalletStatus(pallet.Id, pallet.Status);
+            LoadOrders();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error updating pallet status");
+        }
+        return Task.CompletedTask;
     }
 }

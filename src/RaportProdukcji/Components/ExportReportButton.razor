@@ -1,0 +1,57 @@
+@using RaportProdukcji.Models
+@using RaportProdukcji.Services
+@inject IReportService ReportService
+@inject IJSRuntime JS
+
+<div class="btn-group" role="group">
+    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="ExportCsv">
+        <i class="bi bi-file-earmark-spreadsheet"></i> Eksport CSV
+    </button>
+    @if (ShowPrintButton)
+    {
+        <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="PrintReport">
+            <i class="bi bi-printer"></i> Drukuj
+        </button>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public ProductionOrder? Order { get; set; }
+
+    [Parameter]
+    public List<ProductionOrder>? Orders { get; set; }
+
+    [Parameter]
+    public bool ShowPrintButton { get; set; } = true;
+
+    private async Task ExportCsv()
+    {
+        if (Order != null)
+        {
+            var data = await ReportService.ExportOrderToCsvAsync(Order);
+            var fileName = $"Raport-{Order.ProductName}-{DateTime.Now:yyyy-MM-dd}.csv";
+            await DownloadFile(data, fileName);
+        }
+        else if (Orders != null && Orders.Count > 0)
+        {
+            var data = await ReportService.ExportOrdersToExcelAsync(Orders);
+            var fileName = $"Raport-Wszystkie-Zlecenia-{DateTime.Now:yyyy-MM-dd}.csv";
+            await DownloadFile(data, fileName);
+        }
+    }
+
+    private async Task DownloadFile(byte[] data, string fileName)
+    {
+        await JS.InvokeVoidAsync("downloadFile", data, fileName, "text/csv");
+    }
+
+    private void PrintReport()
+    {
+        if (Order != null)
+        {
+            var report = ReportService.GenerateOrderSummaryReport(Order);
+            // TODO: Implement print dialog or open in new window
+        }
+    }
+}
